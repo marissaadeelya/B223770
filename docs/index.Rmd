@@ -1,33 +1,109 @@
 ---
-title: "Assessment"
+title: "How do salbutamol prescriptions in Scotland vary by season, and to what extent are these patterns influenced by age groups?"
 output: html_document
 date: "2025-10-31"
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE,warning = FALSE, message = FALSE)
 ```
 
-## R Markdown
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+## Background
+## Introducing Data
 
-## headings
+```{r load_data_June23_to_May25}
+library(tidyverse)
+library(janitor) 
+library(here)
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
 
-```{r cars}
-summary(cars)
+files <- list.files(here("data", "consecutive_data"), pattern = ".csv")
+
+consecutive_data <- files %>%
+    map_dfr( ~ read_csv(here("data", "consecutive_data", .),
+    col_types = cols(DMDCode = col_character()))) %>%
+    clean_names() %>% 
+    select (hbt , bnf_item_description,  paid_quantity, paid_date_month) 
+   
 ```
 
-## Including Plots
+## Joining HB Data - refer explanation in starter
 
-You can also embed plots, for example:
+```{r}
+HB_lookup <-
+  read_csv("https://www.opendata.nhs.scot/dataset/9f942fdb-e59e-44f5-b534-d6e17229cc7b/resource/652ff726-e676-4a20-abda-435b98dd7bdc/download/hb14_hb19.csv")%>%
+  clean_names() %>% 
+  select(hb,hb_name)
 
-```{r pressure, echo=FALSE}
-plot(pressure)
-boxplot(pressure)
+
+Jun23_May25_Data <- consecutive_data %>%
+  full_join(HB_lookup, by = c("hbt" = "hb")) %>% 
+  group_by(paid_date_month,hbt,hb_name, bnf_item_description) %>% 
+  summarise(paid_quantity = sum(paid_quantity))
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
-echo = TRUE code
+## Salbutamol Data by Season
+
+```{r}
+
+## Since this analysis focus only on the official NHS HB codes (begin with S08), filter SB0806
+
+salbutamol_data <- Jun23_May25_Data %>%
+   filter(str_detect(bnf_item_description, "SALBUTAMOL"),
+         (hbt != "SB0806")) %>%
+   mutate(paid_date_month = ym(as.character(paid_date_month)),
+          month_number = month(paid_date_month),
+          month_label =  format(paid_date_month, "%b"),
+
+# Custom years     
+          year = case_when(
+          month_number >= 6 ~ paste0 (year(paid_date_month), "/", year(paid_date_month) + 1),
+          TRUE ~ paste0 (year(paid_date_month) - 1, "/", year(paid_date_month))),
+
+# Season classification 
+         season = case_when(
+         month_number %in% c(12, 1, 2)  ~ "Winter",
+         month_number %in% c(3, 4, 5)   ~ "Spring",
+         month_number %in% c(6, 7, 8)   ~ "Summer",
+         month_number %in% c(9, 10, 11) ~ "Autumn"),
+         season = factor(season, levels = c("Summer", "Autumn", "Winter", "Spring")))%>%
+  group_by(hb_name,bnf_item_description,season,year) %>%
+  summarise(total_prescriptions = sum(paid_quantity, na.rm = TRUE), .groups = "drop") 
+
+
+```
+
+## Figure 1: Scotland-Wide Salbutamol Seasonal Trend
+
+```{r}
+
+# Data for plotting
+salbutamol_plot_data <- salbutamol_data %>%
+  group_by(season, year) %>%
+  summarise(total_prescriptions = sum(total_prescriptions, na.rm = TRUE))
+
+# Plot
+salbutamol_plot <- ggplot(salbutamol_plot_data, 
+                          aes(x = season, y = total_prescriptions, 
+                              group = year, color = factor(year))) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 3) +
+  scale_y_continuous(labels = scales::comma) +
+  labs(
+  title = "Seasonal Distribution of Salbutamol Prescriptions in Scotland",
+    x = "Season",
+    y = "Total Prescriptions",
+    color = "Year Group (June–May)"
+  ) +
+  theme_minimal()
+
+salbutamol_plot
+```
+
+## Compare by Health Board
+
+```{r}
+
+```
+
