@@ -12,44 +12,56 @@ knitr::opts_chunk$set(echo = TRUE,warning = FALSE, message = FALSE)
 
 Salbutamol is commonly used to relieve respiratory symptoms in asthma and chronic obstructive pulmonary disease (COPD). It relaxes airway muscles, making it easier to breathe during breathing difficulties or flare-ups. As a widely prescribed drug, it is available as inhalers, nebulizers, and tablets, reflecting the high prevalence of respiratory conditions. Its use has been reported to vary seasonally, often peaking in colder months. Therefore, this report aims to investigate whether these seasonal trends are also observed specifically in Scotland, in order to better understand patterns in respiratory care.
 
-```{r load_data_June23_to_May25, echo=FALSE}
+```{r Load libraries and data from June 2023 to May 2025}
 library(tidyverse)
-library(janitor) 
+library(janitor)
 library(here)
+library(gt)
+
+# Read URL list from GitHub csv file for reproducibility
+urls_list <-
+  read_csv(
+    "https://raw.githubusercontent.com/marissaadeelya/B223770/main/urls.csv") %>%
+  pull(url)
+
+# Introducing data from June 2023 to May 2025 
+consecutive_data <- urls_list %>% 
+  map_dfr(~ read_csv(.x, col_types = cols(.default = col_character()))) %>%
+  clean_names() %>%
+  select(hbt, bnf_item_description, paid_quantity, paid_date_month)
 
 
-files <- list.files(here("data", "consecutive_data"), pattern = ".csv")
-
-consecutive_data <- files %>%
-    map_dfr( ~ read_csv(here("data", "consecutive_data", .),
-    col_types = cols(DMDCode = col_character()))) %>%
-    clean_names() %>% 
-    select (hbt , bnf_item_description,  paid_quantity, paid_date_month) 
-   
 ```
+
 
 ## Introducing Salbutamol Data by Season for 2 Complete Cycles (June 2023 - May 2025)
 
 This section filters data to focus only on salbutamol prescriptions, excluding the non-official NHS health board code (SB0806). The aim is to capture seasonal prescription trends across Scotland before introducing regional differences.
 
-```{r salbutamol data}
+```{r Classify Salbutamol prescription by season}
+
+# Filter salbutamol prescription and classify months
 salbutamol_data <- consecutive_data %>%
   filter(str_detect(bnf_item_description, "SALBUTAMOL"),
          hbt != "SB0806") %>%
-  mutate(paid_date_month = parse_date_time(paid_date_month, "ym"),
-         month_number = month(paid_date_month),
-         year = case_when(
-           month_number >= 6 ~ paste0(year(paid_date_month), "/", year(paid_date_month) + 1),
-           TRUE ~ paste0(year(paid_date_month) - 1, "/", year(paid_date_month))
-         ),
-         season = case_when(
+  mutate(
+    paid_quantity = as.numeric(paid_quantity),
+    paid_date_month = parse_date_time(paid_date_month, "ym"),
+    month_number = month(paid_date_month),
+    
+         
+# Custom year into 2023/2024 and 2024/2025
+    year = case_when(
+      month_number >= 6 ~ paste0(year(paid_date_month), "/", year(paid_date_month) + 1),
+           TRUE ~ paste0(year(paid_date_month) - 1, "/", year(paid_date_month))),
+
+# Convert months into seasons        
+ season = case_when(
            month_number %in% c(12, 1, 2) ~ "Winter",
            month_number %in% c(3, 4, 5) ~ "Spring",
            month_number %in% c(6, 7, 8) ~ "Summer",
-           month_number %in% c(9, 10, 11) ~ "Autumn"
-         ),
-         season = factor(season, levels = c("Summer", "Autumn", "Winter", "Spring"))
-  ) %>%
+           month_number %in% c(9, 10, 11) ~ "Autumn"),
+         season = factor(season, levels = c("Summer", "Autumn", "Winter", "Spring"))) %>%
   group_by(paid_date_month, hbt, bnf_item_description, season, year) %>%
   summarise(total_prescriptions = sum(paid_quantity, na.rm = TRUE), .groups = "drop")
 
@@ -57,46 +69,361 @@ salbutamol_data <- consecutive_data %>%
 
 ## Aim 1 - Investigating if salbutamol prescriptions fluctuate by season across Scotland.
 
-```{r,echo=FALSE}
-# Aggregate data across all boards for national-level view
+```{r Plot seasonal trend across Scotland}
+
+# Aggregate data across all boards for seasonal national-level view
 salbutamol_overall_season <- salbutamol_data %>%
   group_by(season, year) %>%
-  summarise(total_prescriptions = sum(total_prescriptions, na.rm = TRUE), .groups = "drop")
+  summarise(
+    total_prescriptions = sum(total_prescriptions, na.rm = TRUE),
+    .groups = "drop")
 
-# Line plot
-plot_seasonal_trend <- salbutamol_overall_season  %>% 
-  ggplot(aes(x = season, y = total_prescriptions, 
-         group = year, color = factor(year))) +
-  geom_line(linewidth = 1.2) +
+# Create line chart (figure 1)
+plot_seasonal_trend <- salbutamol_overall_season %>%
+  ggplot(aes(
+    x = season,
+    y = total_prescriptions,
+    color = year,
+    group = year)) +
+  geom_line(linewidth = 1.4) +
   geom_point(size = 3) +
   scale_y_continuous(labels = scales::comma) +
-  scale_color_brewer(palette = "Dark2") +
+  scale_color_brewer(palette = "Set1") +
   labs(
     title = "Seasonal Distribution of Salbutamol Prescriptions in Scotland",
     subtitle = "Each line represents a June–May year period",
     x = "Season",
     y = "Total Prescriptions",
-    color = "Year Group (June–May)"
-  ) +
-  theme_minimal(base_size = 13) +
+    color = "Year Group (June–May)") +
+  theme_bw(base_size = 12) +
   theme(
-    plot.title = element_text(face = "bold", size = 15),
+    plot.title = element_text(face = "bold", size = 15, hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5),
     axis.text.x = element_text(angle = 30, hjust = 1),
-    legend.position = "bottom"
-  )
+    legend.position = "bottom")
 
 plot_seasonal_trend
-
 ```
 
 Figure 1 illustrates the overall seasonal trend in salbutamol prescriptions across Scotland, showing that total prescriptions fluctuate seasonally, peaking in winter and declining in spring. This pattern is consistent with previous studies and reflects higher rates of respiratory infections and asthma exacerbations during colder months.
+(p/s: explain why less prescription this year, and why drop during spring)
 
 ## Aim 2 - Comparing Salbutamol Prescriptions Trend by NHS Board
 
 The next step is to examine whether this seasonal pattern is consistent across different NHS Boards. While total prescriptions reveal clear seasonal variation, these values are influenced by population size differences across NHS Boards.To allow meaningful comparison, prescription rates were calculated per head using NHS Board population estimates.
 
-I did facet line chart and found similar trend across all boards with peak in winter, consistent for 2 years comparison.
+```{r Load NHS healthboard and population data}
 
-## Aim 3 - Identify Which Age Group Influence Higher Prescription During Winter Across Scotland
-I created a facet bar chart by NHS Board showing the two-year pattern, which revealed a similar trend, with higher salbutamol prescriptions in the 40–64 years age group. I plan to proceed with my fourth plot to produce a map; however, due to page limitations, I might replace this bar chart with multiple maps representing different age groups. I expect that the map for the 40–64 years age group will display stronger colour intensity compared to the other maps. I would greatly appreciate your thoughts on this. Thank you so much :)
+hb_lookup <-
+  read_csv("https://www.opendata.nhs.scot/dataset/9f942fdb-e59e-44f5-b534-d6e17229cc7b/resource/652ff726-e676-4a20-abda-435b98dd7bdc/download/hb14_hb19.csv",
+    col_types = cols(.default = col_character())) %>%
+  clean_names() %>%
+  select(hb, hb_name) %>%
+  filter(!duplicated(hb_name))
 
+population_data <-read_csv( here("data", "UV102a_age_health_board_census.csv"),
+    skip = 10,
+    col_types = cols(.default = col_character())) %>%
+  clean_names() %>%
+  rename(spare = x6,
+         hb_name = health_board_area_2019,
+         hb_population = count) %>%
+  mutate(hb_name = paste("NHS", hb_name)) %>%
+  filter(!is.na(hb_population)) %>%
+  select(-spare, hb_name, age, sex, hb_population)
+```
+
+## Figure 2: Prescription Trend by NHS Board
+
+```{r Plot Prescription Trend by NHS Board }
+
+# Joining (refer to notes)
+
+hb_salbutamol_data <- salbutamol_data %>% 
+  left_join(hb_lookup, by = c("hbt"="hb")) %>% 
+  filter(!is.na(hb_name)) %>% 
+  select(hbt,hb_name, season, year, total_prescriptions)
+
+hb_per_head_salbutamol_data <- hb_salbutamol_data %>% 
+  left_join(
+    population_data %>% 
+      filter(age == "All people", sex == "All people") %>% 
+      distinct(hb_name, .keep_all = TRUE) %>% 
+      mutate(hb_population = as.numeric(hb_population)),  
+    by = "hb_name"
+  ) %>%  
+  group_by(hb_name, season, year) %>% 
+  summarise(
+    prescriptions_per_head = sum(total_prescriptions, na.rm = TRUE) / unique(hb_population),
+    .groups = "drop"
+  )
+
+
+plot_hb_per_head <- ggplot(hb_per_head_salbutamol_data, 
+                    aes(x = season, y = prescriptions_per_head, 
+                    group = interaction(hb_name, year), 
+                    color = factor(year))) + 
+        geom_line(linewidth =1) + geom_point(size =2) + 
+  facet_wrap(~ hb_name, scales ="free_y") +
+  scale_y_continuous(labels = scales::comma) +  scale_color_brewer(palette ="Dark2") + 
+  labs( title = "Seasonal Salbutamol Prescriptions per Head by NHS Regions", subtitle ="Each line represents a June–May year period", 
+        x ="Season", y ="Total Prescriptions per Head", 
+        color ="Year Group (June–May)") +
+  theme_minimal(base_size =10) + 
+  theme( axis.text.x = element_text(angle =30, hjust =1),  
+         legend.position ="bottom", strip.text = element_text(face ="bold"))
+
+
+plot_hb_per_head
+```
+
+Figure 2:
+Higher prescription overall - South region, Forth Valley (central), Less prescription in North (comment on limited access to gp etc + suggest reference)
+BUT,
+alert with winter time, 
+Regardless of region, it depends on accessibility for prescription
+All drop during spring
+Drastic peak for north region (grampian, orkney)
+
+### NHS Group into region
+North: Grampian, Highland, Orkney, Shetland, Western Isles
+Central: Lothian, Forth Valley, Tayside, Fife
+South: Greater Glasgow & Clyde, Ayrshire & Arran, Lanarkshire, Dumfries & Galloway, Borders
+
+## Aim 3 - Population-Context
+
+Since all NHS Boards showed a similar winter peak, the next step was to examine whether this seasonal increase differs by region and age group. Two NHS Boards were selected to represent contrasting winter climates in Scotland: a colder northern region (NHS Highland) and a milder southern region (NHS Ayrshire and Arran), allowing comparison of the magnitude and age distribution of salbutamol prescriptions in winter.
+
+# Hint: Age-specific prescription counts were not available. Therefore, prescriptions were allocated proportionally based on each age group's share of the NHS Board population. These values represent population-weighted estimates, not actual prescribing rates.
+
+### Random Thought
+prescribing not available by age
+population distribution cannot indicate actual prescribing rates
+
+```{r population_summary}
+
+population_summary <- population_data %>%
+  mutate(
+    hb_population = as.numeric(hb_population),
+    age_group = case_when(
+      age == "Under 1" ~ "0-1",
+      age %in% as.character(1:17) ~ "1-17",
+      age %in% as.character(18:39) ~ "18-39",
+      age %in% as.character(40:64) ~ "40-64",
+      age %in% as.character(65:84) ~ "65-84",
+      age == "85 and over" ~ "85+",
+    ),
+    age_group = factor(age_group, levels = c("0-1","1-17","18-39","40-64","65-84","85+")),
+    region = case_when(
+      hb_name %in% c("NHS Highland", "NHS Grampian", "NHS Tayside",
+                     "NHS Orkney", "NHS Shetland", "NHS Western Isles") ~ "North",
+      hb_name %in% c("NHS Greater Glasgow and Clyde", "NHS Lanarkshire",
+                     "NHS Ayrshire and Arran", "NHS Forth Valley") ~ "Central",
+      hb_name %in% c("NHS Lothian", "NHS Borders", "NHS Fife", "NHS Dumfries and Galloway") ~ "South",
+      TRUE ~ "Other"
+    )
+  ) %>%
+  filter(!is.na(age_group), sex %in% c("Female", "Male")) %>%
+  group_by(region, hb_name, age_group, sex) %>%
+  summarise(population = sum(hb_population, na.rm = TRUE), .groups = "drop")
+```
+
+```{r age group table 3}
+
+# Compute population + percentage
+region_population <- population_summary %>%
+  group_by(region, age_group, sex) %>%
+  summarise(population = sum(population), .groups = "drop") %>%
+  group_by(region) %>%
+  mutate(
+    region_total = sum(population),
+    percentage = (population / region_total) * 100
+  ) %>%
+  ungroup()
+
+# Pivot wider with original names
+region_table <- region_population %>%
+  select(region, age_group, sex, percentage) %>%
+  pivot_wider(
+    names_from = sex,
+    values_from = percentage,
+    values_fill = 0
+  ) %>%
+  group_by(region, age_group) %>%
+  summarise(
+    Male = sum(Male),
+    Female = sum(Female),
+    .groups = "drop"
+  ) %>%
+  pivot_wider(
+    names_from = region,
+    values_from = c(Male, Female)
+  ) %>%
+  arrange(match(age_group, c("0-1","1-17","18-39","40-64","65-84","85+")))
+
+# Add total row
+region_table <- region_table %>%
+  bind_rows(
+    summarise(
+      .,
+      age_group = "Total",
+      Male_North = sum(Male_North, na.rm = TRUE),
+      Female_North = sum(Female_North, na.rm = TRUE),
+      Male_Central = sum(Male_Central, na.rm = TRUE),
+      Female_Central = sum(Female_Central, na.rm = TRUE),
+      Male_South = sum(Male_South, na.rm = TRUE),
+      Female_South = sum(Female_South, na.rm = TRUE)
+    )
+  )
+
+#  Identify max age group (excluding Total)
+max_age <- region_table %>%
+  filter(age_group != "Total") %>%
+  mutate(max_val = pmax(
+    Male_North, Female_North,
+    Male_Central, Female_Central,
+    Male_South, Female_South
+  )) %>%
+  slice_max(max_val) %>%
+  pull(age_group)
+
+# Create GT table
+region_gt_table <- region_table %>%
+  gt() %>%
+  fmt_number(columns = where(is.numeric), decimals = 2) %>%
+  tab_header(
+    title = "Population by Region and Age Group",
+    subtitle = "Distribution of population percentages by sex within each region"
+  ) %>%
+  tab_spanner(label = "North (%)", columns = c(Male_North, Female_North)) %>%
+  tab_spanner(label = "Central (%)", columns = c(Male_Central, Female_Central)) %>%
+  tab_spanner(label = "South (%)", columns = c(Male_South, Female_South)) %>%
+  cols_label(
+    Male_North = "Male",
+    Female_North = "Female",
+    Male_Central = "Male",
+    Female_Central = "Female",
+    Male_South = "Male",
+    Female_South = "Female"
+  ) %>%
+  tab_style(
+    style = list(
+      cell_fill(color = "darkblue"),
+      cell_text(color = "white", weight = "bold", size = "large")
+    ),
+    locations = cells_title(groups = "title")
+  ) %>%
+  tab_style(
+    style = list(
+      cell_fill(color = "lightblue"),
+      cell_text(color = "black", weight = "bold", size = "small")
+    ),
+    locations = cells_title(groups = "subtitle")
+  ) %>%
+  tab_style(
+    style = list(
+      cell_fill(color = "orange"),
+      cell_text(weight = "bold")
+    ),
+    locations = cells_body(rows = age_group == max_age)
+  ) %>%
+  tab_style(
+    style = list(
+      cell_fill(color = "grey"),
+      cell_text(weight = "bold")
+    ),
+    locations = cells_body(rows = age_group == "Total")
+  ) %>%
+  cols_align(align = "center", columns = where(is.numeric)) %>%
+  tab_source_note(
+    source_note = "All values are percentages of the total population in each region."
+  ) %>%
+  cols_width(everything() ~ px(80))
+
+region_gt_table
+
+```
+
+```{r heatmap}
+
+
+# data being plotted is the raw population counts
+heatmap <- ggplot(population_summary, aes(
+  x = age_group,
+  y = hb_name,
+  fill = population
+)) +
+  geom_tile() +
+
+  # Colour scale using log10 for better visibility
+  scale_fill_distiller(
+    palette = "RdBu",
+    direction = -1,               # -1 = blue low to red high
+    trans = "log10",
+    name = "Population\n",
+    labels = scales::label_number(scale_cut = scales::cut_short_scale())
+  # legend labels in 1k, 1M, etc.
+  ) +
+
+  # Facet boards by Region (rows) and Sex (columns)
+  facet_grid(region ~ sex, scales = "free_y", space = "free_y") +
+
+  # Labels
+  labs(
+    title = "Population Heatmap by NHS Board, Age Group, Sex, and Region",
+    x = "Age Group",
+    y = "NHS Board",
+    caption = "Note: Colour Colour intensity is based on log10 of raw population counts to improve visibility across NHS boards of very different sizes."
+  ) +
+
+  # Theme tweaks
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 7),
+    strip.text = element_text(face = "bold", size = 10),
+    plot.title = element_text(face = "bold")
+  )
+
+heatmap
+
+```
+
+
+
+“Although population structure (age and sex distribution) was summarised for each NHS region, these data cannot be used to infer which age groups contribute most to salbutamol prescribing. Prescribing is driven by underlying respiratory disease prevalence, not population size, and the absence of age-linked prescribing data prevents any direct age-group comparisons.”
+
+“Population structure was included as contextual information only and should not be interpreted as an indicator of prescribing patterns.”
+
+Despite colder winters in northern Scotland, salbutamol prescribing is higher in NHS Ayrshire and Arran than NHS Highland. This pattern reflects the influence of population density, urbanization, and socioeconomic factors on respiratory disease prevalence and healthcare utilization. Urban areas experience higher air pollution and allergen exposure, increasing the risk of asthma exacerbations, while greater access to primary care facilitates more frequent prescription of rescue medication. Conversely, northern regions are more sparsely populated, less deprived, and have longer distances to healthcare services, contributing to lower overall prescription rates despite colder temperatures. (find references)
+
+Although population structure (age and sex distribution) was summarised for each NHS region, these data were included as contextual demographic information rather than predictors of salbutamol prescribing. Prescribing activity is primarily driven by the underlying prevalence and severity of asthma and other respiratory conditions, which do not necessarily align with population size in each age group. Without age-specific prescribing data, it is not possible to determine which age groups contribute most to SABA use. However, presenting population structure remains valuable in this report as it helps situate prescribing patterns within the broader demographic landscape of each NHS board, highlights regional differences that may influence service planning, and provides a foundation for future analyses that could integrate age-stratified prescribing or disease-prevalence data.
+
+“While population structure does not directly explain salbutamol prescribing patterns, its inclusion enhances interpretation of regional trends by illustrating the demographic context in which prescribing occurs. These demographic patterns may influence long-term service demand, respiratory risk profiles, and public-health planning. Therefore, although not used for causal inference, demographic data contribute to a more comprehensive understanding of the prescribing landscape.”
+
+## Limitations:
+- Measurement based on proportion, not from actual data, therefore comparing two different geographical areas
+- Age group (proportion), cannot see significant % changes pattern between years -> identical %
+
+A key limitation of this analysis is that the prescribing dataset does not include information on patient age, meaning prescriptions cannot be linked to specific age groups. Although age-specific population data are available for each NHS board, the total number of salbutamol prescriptions is only reported at board level, without breakdown by age. As a result, it is not possible to determine which age group actually has the highest prescribing rate or contributes most to the winter peak. Any attempt to estimate prescribing by age would rely on population proportions rather than true prescribing behaviour, which would be statistically invalid and potentially misleading. Therefore, age-group comparisons are not conducted, and all interpretations are limited to board-level prescribing rates.
+
+(Identify the highest-prescribing age group, Link prescriptions directly to age or sex)
+
+Infer individual-level clinical risk)
+
+## Conclusion
+This study provides a meaningful assessment of salbutamol prescribing patterns at both national and NHS board levels, highlighting consistent seasonal trends and regional variation. By expressing prescribing on a per-head basis, fair comparisons between regions are possible, and population distributions by age and sex offer contextual insight into which groups are likely to contribute most to total prescriptions. However, a key limitation is the absence of age-specific prescribing data, meaning actual prescribing rates for specific age groups cannot be determined. Consequently, inferences regarding the contribution of different age groups are based solely on population size rather than observed prescribing behaviour. Despite this, the findings remain relevant for understanding overall prescribing patterns and informing resource planning and seasonal preparedness.
+
+(forecasting,regional respiratory health comparisons)
+
+healthcare service allocation)
+
+## Future Direction:
+Once getting actual prescriptions data for age-group and sex, apply for diff NHS board to get better overview of prescriptions, better repiratory care understanding
+
+## Extra Notes
+Because salbutamol use is driven by disease prevalence (asthma), not population size.
+
+For example:
+Children (5–14) have the highest asthma prevalence. Adults 40–64 are numerous, but often have lower asthma prevalence.
+Older adults may use more bronchodilators due to COPD.
+So a region with a huge 40–64 population does NOT mean they are the biggest contributors to salbutamol prescriptions.
