@@ -194,7 +194,7 @@ South: Greater Glasgow & Clyde, Ayrshire & Arran, Lanarkshire, Dumfries & Gallow
 
 Since all NHS Boards showed a similar winter peak, the next step was to examine whether this seasonal increase differs by region and age group. Two NHS Boards were selected to represent contrasting winter climates in Scotland: a colder northern region (NHS Highland) and a milder southern region (NHS Ayrshire and Arran), allowing comparison of the magnitude and age distribution of salbutamol prescriptions in winter.
 
-# Hint: Age-specific prescription counts were not available. Therefore, prescriptions were allocated proportionally based on each age group's share of the NHS Board population. These values represent population-weighted estimates, not actual prescribing rates.
+### Hint: Age-specific prescription counts were not available. Therefore, prescriptions were allocated proportionally based on each age group's share of the NHS Board population. These values represent population-weighted estimates, not actual prescribing rates.
 
 ### Random Thought
 prescribing not available by age
