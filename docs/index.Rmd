@@ -8,9 +8,20 @@ date: "2025-11-14"
 knitr::opts_chunk$set(echo = TRUE,warning = FALSE, message = FALSE)
 ```
 
-## Background : Salbutamol
+## Background: Burden of Respiratory Conditions and the Role of Salbutamol
 
-Salbutamol is commonly used to relieve respiratory symptoms in asthma and chronic obstructive pulmonary disease (COPD). It relaxes airway muscles, making it easier to breathe during breathing difficulties or flare-ups. As a widely prescribed drug, it is available as inhalers, nebulizers, and tablets, reflecting the high prevalence of respiratory conditions. Its use has been reported to vary seasonally, often peaking in colder months. Therefore, this report aims to investigate whether these seasonal trends are also observed specifically in Scotland, in order to better understand patterns in respiratory care.
+Emergency admissions for respiratory diseases, including asthma and chronic obstructive pulmonary disease (COPD), have increased in recent years. In 2024, England recorded 854,922 emergency admissions, representing a 7% rise from the previous year (UK Government, 2025)((https://www.gov.uk/government/statistics/update-of-indicators-in-the-respiratory-disease-profile-june-2025/respiratory-disease-profile-statistical-commentary-june-2025).
+
+To reduce hospitalisations and manage symptoms, salbutamol is widely used as the first selective short-acting β₂-agonist (SABA) for asthma treatment. It relaxes airway smooth muscle, improving breathing during episodes of respiratory distress or flare-ups. Salbutamol is considered one of the most effective and safest essential medicines and is available in several formulations, including inhalers, nebulisers, and tablets (Marques and Vale,2022)(https://pmc.ncbi.nlm.nih.gov/articles/PMC9696300/).
+
+## Study Motivation: Seasonal Fluctuations in Respiratory Medication Demand
+
+A study in Syria reported seasonal variation in the dispensing of medicines for asthma and COPD, with higher rates in autumn and winter and lower rates in summer (Aljadeeah et al., 2025)(https://doi.org/10.1080/16549716.2025.2556526). Building on this, this report investigates whether seasonal patterns exist in salbutamol prescribing across Scotland and explores NHS board-level population structure, in terms of age and sex distributions to contextualise potential differences in prescribing trends.
+
+## About the Data
+The prescription data used in this study were obtained from Public Health Scotland, specifically from the Data by Prescriber Location dataset. 24 monthly files (one file per month) covering the period June 2023 to May 2025 were utilised, providing detailed records of items prescribed in the community.
+
+To support reproducibility, the download links for all 24 CSV files were compiled into a single CSV file and made available via GitHub.
 
 ```{r Load libraries and data from June 2023 to May 2025}
 library(tidyverse)
@@ -19,9 +30,7 @@ library(here)
 library(gt)
 
 # Read URL list from GitHub csv file for reproducibility
-urls_list <-
-  read_csv(
-    "https://raw.githubusercontent.com/marissaadeelya/B223770/main/urls.csv") %>%
+urls_list <- read_csv( "https://raw.githubusercontent.com/marissaadeelya/B223770/main/urls.csv") %>%
   pull(url)
 
 # Introducing data from June 2023 to May 2025 
@@ -30,15 +39,12 @@ consecutive_data <- urls_list %>%
   clean_names() %>%
   select(hbt, bnf_item_description, paid_quantity, paid_date_month)
 
-
 ```
 
-
 ## Introducing Salbutamol Data by Season for 2 Complete Cycles (June 2023 - May 2025)
+This section filters data to focus only on salbutamol prescriptions, excluding the non-official NHS health board code (SB0806). 
 
-This section filters data to focus only on salbutamol prescriptions, excluding the non-official NHS health board code (SB0806). The aim is to capture seasonal prescription trends across Scotland before introducing regional differences.
-
-```{r Classify Salbutamol prescription by season}
+```{r Classify salbutamol prescription by season}
 
 # Filter salbutamol prescription and classify months
 salbutamol_data <- consecutive_data %>%
@@ -49,8 +55,7 @@ salbutamol_data <- consecutive_data %>%
     paid_date_month = parse_date_time(paid_date_month, "ym"),
     month_number = month(paid_date_month),
     
-         
-# Custom year into 2023/2024 and 2024/2025
+# Custom year into 2023/2024 and 2024/2025. 'paste0()' joins years without inserting a space
     year = case_when(
       month_number >= 6 ~ paste0(year(paid_date_month), "/", year(paid_date_month) + 1),
            TRUE ~ paste0(year(paid_date_month) - 1, "/", year(paid_date_month))),
@@ -67,19 +72,19 @@ salbutamol_data <- consecutive_data %>%
 
 ```
 
-## Aim 1 - Investigating if salbutamol prescriptions fluctuate by season across Scotland.
+## Aim 1: To investigate if salbutamol prescriptions fluctuate by season across Scotland.
 
 ```{r Plot seasonal trend across Scotland}
 
 # Aggregate data across all boards for seasonal national-level view
-salbutamol_overall_season <- salbutamol_data %>%
+seasonal_salbutamol <- salbutamol_data %>%
   group_by(season, year) %>%
   summarise(
     total_prescriptions = sum(total_prescriptions, na.rm = TRUE),
     .groups = "drop")
 
 # Create line chart (figure 1)
-plot_seasonal_trend <- salbutamol_overall_season %>%
+plot_seasonal_trend <- seasonal_salbutamol %>%
   ggplot(aes(
     x = season,
     y = total_prescriptions,
@@ -427,3 +432,7 @@ For example:
 Children (5–14) have the highest asthma prevalence. Adults 40–64 are numerous, but often have lower asthma prevalence.
 Older adults may use more bronchodilators due to COPD.
 So a region with a huge 40–64 population does NOT mean they are the biggest contributors to salbutamol prescriptions.
+
+## References
+GOV.UK (2025). Respiratory disease profile: statistical commentary, June 2025. [online] GOV.UK. Available at: https://www.gov.uk/government/statistics/update-of-indicators-in-the-respiratory-disease-profile-june-2025/respiratory-disease-profile-statistical-commentary-june-2025.
+
