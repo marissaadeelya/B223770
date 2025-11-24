@@ -6,7 +6,7 @@ output:
   html_document:
     toc: true
     toc_float: true
-    theme: flatly
+    theme: lumen
     code_download: true
 ---
 
@@ -116,7 +116,8 @@ line_charts_custom <- function(df, x_var, y_var, colour_var, group_var,size, y_l
       plot.title = element_text(face = "bold", size = 13, hjust = 0.5),
       plot.subtitle = element_text(hjust = 0.5),
       axis.text.x = element_text(angle = 30, hjust = 1),
-      legend.position ="bottom", strip.text = element_text(face ="bold"))}
+      legend.position ="bottom",
+      legend.text = element_text(size = 11),strip.text = element_text(face ="bold"))}
 
 # Plot Figure 1 (Prescription Seasonal Trend in Scotland)
 plot_seasonal_trend <- seasonal_salbutamol %>% 
@@ -167,8 +168,30 @@ population_data <-read_csv( here("data", "UV102a_age_health_board_census.csv"),
 
 Join the `population_data` file with your main data file, so you can see the population of each healthboard.
 
+```{r Categorise NHS boards into regions}
 
-```{r Plot (Figure 2) Prescription Trend by NHS Board, fig.width=10, fig.height=7 }
+# A reusable function (add_region) was created to assign NHS Boards to regions in different datasets. 
+add_region <- function(df) {
+  df %>%
+    mutate(
+      region = case_when(
+        hb_name %in% c(
+          "NHS Highland", "NHS Grampian", "NHS Tayside",
+          "NHS Orkney", "NHS Shetland", "NHS Western Isles"
+        ) ~ "North",
+        hb_name %in% c(
+          "NHS Greater Glasgow and Clyde", "NHS Lanarkshire",
+          "NHS Ayrshire and Arran", "NHS Forth Valley"
+        ) ~ "Central",
+        hb_name %in% c(
+          "NHS Lothian", "NHS Borders", "NHS Fife",
+          "NHS Dumfries and Galloway"
+        ) ~ "South",
+        TRUE ~ "Other"
+      ))}
+```
+
+```{r Plot (Figure 2) Prescription Trend by NHS Board, fig.width=8, fig.height=5 }
 
 # Joining (refer to notes)
 
@@ -189,11 +212,18 @@ hb_per_head_salbutamol_data <- hb_salbutamol_data %>%
   summarise(
     prescriptions_per_head = sum(total_prescriptions, na.rm = TRUE) / unique(hb_population),
     .groups = "drop"
-  )
+  ) %>% 
+  add_region()
 
 # Plot Figure 2 to show seasonal prescriptions by NHS Boards
 plot_hb_trend_per_head <- hb_per_head_salbutamol_data %>% 
-  line_charts_custom(season, prescriptions_per_head, factor(year),interaction(hb_name, year), 2,"Total Prescriptions per Head", "Seasonal Salbutamol Prescriptions per Head by NHS Boards", 10) + facet_wrap(~ hb_name,scales ="free_y")
+  line_charts_custom(season, prescriptions_per_head, factor(year),interaction(hb_name, year), 2,"Total Prescriptions per Head", "Seasonal Salbutamol Prescriptions per Head by NHS Boards", 10) + facet_wrap(region~ hb_name,scales ="free_y") + labs(
+    caption = "Note: NHS Boards are categorised into three regions - Central, North and South."
+  ) +
+  theme(
+    plot.caption = element_text(
+      size = 12,      # increase caption size
+      hjust = 0.5))
 
 plot_hb_trend_per_head
 ```
@@ -216,7 +246,7 @@ Since all NHS Boards showed a similar winter peak, the next step was to examine 
 
 Hint: Age-specific prescription counts were not available. Therefore, prescriptions were allocated proportionally based on each age group's share of the NHS Board population. These values represent population-weighted estimates, not actual prescribing rates.
 
-```{r Age group setup and categorise NHS boards}
+```{r Age group setup}
 
 population_summary <- population_data %>%
   mutate(
@@ -227,21 +257,16 @@ population_summary <- population_data %>%
       age %in% as.character(18:39) ~ "18-39",
       age %in% as.character(40:64) ~ "40-64",
       age %in% as.character(65:84) ~ "65-84",
-      age == "85 and over" ~ "85+",
+      age == "85 and over" ~ "85+"
     ),
-    age_group = factor(age_group, levels = c("0-1","1-17","18-39","40-64","65-84","85+")),
-    region = case_when(
-      hb_name %in% c("NHS Highland", "NHS Grampian", "NHS Tayside",
-                     "NHS Orkney", "NHS Shetland", "NHS Western Isles") ~ "North",
-      hb_name %in% c("NHS Greater Glasgow and Clyde", "NHS Lanarkshire",
-                     "NHS Ayrshire and Arran", "NHS Forth Valley") ~ "Central",
-      hb_name %in% c("NHS Lothian", "NHS Borders", "NHS Fife", "NHS Dumfries and Galloway") ~ "South",
-      TRUE ~ "Other"
-    )
+    age_group = factor(age_group, 
+                       levels = c("0-1","1-17","18-39","40-64","65-84","85+"))
   ) %>%
+  add_region() %>%   # ← now correctly placed *after* mutate()
   filter(!is.na(age_group), sex %in% c("Female", "Male")) %>%
   group_by(region, hb_name, age_group, sex) %>%
   summarise(population = sum(hb_population, na.rm = TRUE), .groups = "drop")
+
 ```
 
 
@@ -349,7 +374,7 @@ region_gt_table
 ```
 
 
-```{r Heatmap (figure 4)}
+```{r Heatmap (figure 4), fig.width= 10}
 
 
 # data being plotted is the raw population counts
@@ -381,13 +406,12 @@ heatmap <- ggplot(population_summary, aes(
     caption = "Note: Colour Colour intensity is based on log10 of raw population counts to improve visibility across NHS boards of very different sizes."
   ) +
 
-  # Theme tweaks
   theme_minimal() +
   theme(
+    plot.caption = element_text(size = 11,hjust = 0.5),
     axis.text.y = element_text(size = 7),
     strip.text = element_text(face = "bold", size = 10),
-    plot.title = element_text(face = "bold")
-  )
+    plot.title = element_text(face = "bold", hjust = 0.5))
 
 heatmap
 
